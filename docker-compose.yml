@@ -1,0 +1,82 @@
+services:
+  aegis-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DOWNSTREAM_URI=http://downstream-mock:8080
+    depends_on:
+      redis:
+        condition: service_healthy
+      downstream-mock:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - aegis-net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: aegis-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - aegis-net
+
+  downstream-mock:
+    image: mendhak/http-https-echo:31
+    container_name: aegis-downstream-mock
+    ports:
+      - "8081:8080"
+    environment:
+      - HTTP_PORT=8080
+    restart: unless-stopped
+    networks:
+      - aegis-net
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: aegis-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1d"
+    restart: unless-stopped
+    networks:
+      - aegis-net
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: aegis-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - aegis-net
+
+networks:
+  aegis-net:
+    driver: bridge

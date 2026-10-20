@@ -1,0 +1,52 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: aegis-gateway
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+      lettuce:
+        pool:
+          max-active: 64
+          max-idle: 16
+          min-idle: 8
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 1000
+        response-timeout: 3s
+      routes:
+        - id: downstream-echo
+          uri: ${DOWNSTREAM_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      redisRateLimiter:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50.0
+        slow-call-rate-threshold: 50.0
+        slow-call-duration-threshold: 200ms
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
